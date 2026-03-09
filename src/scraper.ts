@@ -21,6 +21,8 @@ export interface Restaurant {
   address: string;
   image: string;
   budget: string;
+  lat: number | null;
+  lng: number | null;
 }
 
 function tabelogRange(radiusMeters: number): number {
@@ -70,7 +72,14 @@ function parseCard($: cheerio.CheerioAPI, card: AnyNode): Restaurant | null {
   // Budget
   const budget = $card.find(".list-rst__budget-item").first().text().trim();
 
-  return { name, url, score, genre, address, image, budget };
+  // Coordinates (embedded as data attributes on the card element)
+  const lat = parseFloat($card.attr("data-lat") ?? "");
+  const lng = parseFloat($card.attr("data-lng") ?? "");
+
+  return { name, url, score, genre, address, image, budget,
+    lat: isNaN(lat) ? null : lat,
+    lng: isNaN(lng) ? null : lng,
+  };
 }
 
 export async function fetchRestaurants(

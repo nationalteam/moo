@@ -124,12 +124,19 @@
       restaurantList.appendChild(card);
 
       // ── Map marker ──
-      // Tabelog HTML does not expose per-restaurant lat/lng, so we spread
-      // markers in a ring around the search centre as visual indicators.
-      const angle  = (idx / Math.max(restaurants.length, 1)) * 2 * Math.PI;
-      const spread = Math.min(radius * 0.00001, 0.002);
-      const mLat   = lat + Math.cos(angle) * spread * (0.3 + 0.7 * ((idx % 5) / 5));
-      const mLng   = lng + Math.sin(angle) * spread * (0.3 + 0.7 * ((idx % 5) / 5));
+      // Use per-restaurant coordinates when available (scraped from data-lat /
+      // data-lng on each Tabelog card).  Fall back to a spread ring around the
+      // search centre for the rare case where the data is absent.
+      let mLat, mLng;
+      if (r.lat != null && r.lng != null) {
+        mLat = r.lat;
+        mLng = r.lng;
+      } else {
+        const angle  = (idx / Math.max(restaurants.length, 1)) * 2 * Math.PI;
+        const spread = Math.min(radius * 0.00001, 0.002);
+        mLat = lat + Math.cos(angle) * spread * (0.3 + 0.7 * ((idx % 5) / 5));
+        mLng = lng + Math.sin(angle) * spread * (0.3 + 0.7 * ((idx % 5) / 5));
+      }
 
       const m = L.marker([mLat, mLng], {
         icon: L.divIcon({
