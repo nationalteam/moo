@@ -320,7 +320,7 @@
         setStatus('❌ 瀏覽器不支援定位，請改用手動輸入', 'error');
         return;
       }
-      setStatus('📡 正在透過手機 GPS 取得位置（最多約 12 秒）…', 'info');
+      setStatus('📡 正在以 GPS 優先高精度模式取得位置（最多約 12 秒）…', 'info');
       (async () => {
         try {
           const pos = await getBestGeolocationPosition();
