@@ -1,0 +1,79 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Tabelog 附近高評分餐廳</title>
+  <!-- Serve Leaflet from the local node_modules via the /leaflet route -->
+  <link rel="stylesheet" href="/leaflet/leaflet.css" />
+  <link rel="stylesheet" href="style.css" />
+</head>
+<body>
+  <header class="app-header">
+    <h1>🍜 Tabelog 附近高評分餐廳</h1>
+    <p class="subtitle">
+      搜尋
+      <a href="https://tabelog.com" target="_blank" rel="noopener">食べログ（日文版）</a>
+      附近評分夠高的餐廳
+    </p>
+  </header>
+
+  <!-- ── Search panel ── -->
+  <section class="search-panel">
+    <div class="search-row">
+
+      <!-- Location source -->
+      <div class="field-group">
+        <label class="field-label">📍 位置來源</label>
+        <div class="radio-group">
+          <label><input type="radio" name="loc-source" value="gps" checked /> 自動偵測</label>
+          <label><input type="radio" name="loc-source" value="manual" /> 手動輸入</label>
+        </div>
+      </div>
+
+      <!-- Manual coordinates (hidden by default) -->
+      <div class="field-group" id="manual-coords" style="display:none">
+        <label class="field-label">緯度 / 經度</label>
+        <div class="coords-row">
+          <input type="number" id="input-lat" placeholder="緯度 (e.g. 35.6812)" step="any" />
+          <input type="number" id="input-lng" placeholder="經度 (e.g. 139.7671)" step="any" />
+        </div>
+      </div>
+
+      <!-- Radius -->
+      <div class="field-group">
+        <label class="field-label" for="radius-select">🔍 搜尋半徑</label>
+        <select id="radius-select">
+          <option value="300">300 m</option>
+          <option value="500">500 m</option>
+          <option value="1000" selected>1 km</option>
+          <option value="3000">3 km</option>
+          <option value="5000">5 km</option>
+        </select>
+      </div>
+
+      <!-- Min score -->
+      <div class="field-group">
+        <label class="field-label" for="min-score">⭐ 最低評分</label>
+        <input type="number" id="min-score" value="3.5" min="0" max="5" step="0.1" />
+      </div>
+
+      <button id="search-btn" class="btn-search">搜尋</button>
+    </div>
+
+    <div id="status-bar" class="status-bar" aria-live="polite"></div>
+  </section>
+
+  <!-- ── Map ── -->
+  <div id="map"></div>
+
+  <!-- ── Results ── -->
+  <section id="results-section" class="results-section" style="display:none">
+    <h2>搜尋結果 <span id="result-count" class="result-count"></span></h2>
+    <div id="restaurant-list" class="restaurant-list"></div>
+  </section>
+
+  <script src="/leaflet/leaflet.js"></script>
+  <script src="app.js"></script>
+</body>
+</html>

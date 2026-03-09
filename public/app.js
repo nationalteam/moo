@@ -1,0 +1,225 @@
+(() => {
+  'use strict';
+
+  // ── Map init ──────────────────────────────────────────────────────────────
+  const map = L.map('map').setView([35.6812, 139.7671], 14);
+  L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+    maxZoom: 19,
+    attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
+  }).addTo(map);
+
+  let userMarker = null;
+  let restaurantMarkers = [];
+  let radiusCircle = null;
+
+  // ── DOM refs ──────────────────────────────────────────────────────────────
+  const statusBar      = document.getElementById('status-bar');
+  const searchBtn      = document.getElementById('search-btn');
+  const manualCoords   = document.getElementById('manual-coords');
+  const inputLat       = document.getElementById('input-lat');
+  const inputLng       = document.getElementById('input-lng');
+  const radiusSelect   = document.getElementById('radius-select');
+  const minScoreInput  = document.getElementById('min-score');
+  const resultsSection = document.getElementById('results-section');
+  const restaurantList = document.getElementById('restaurant-list');
+  const resultCount    = document.getElementById('result-count');
+
+  // ── Location source toggle ────────────────────────────────────────────────
+  document.querySelectorAll('input[name="loc-source"]').forEach(radio => {
+    radio.addEventListener('change', () => {
+      manualCoords.style.display = radio.value === 'manual' ? '' : 'none';
+    });
+  });
+
+  // ── Status helper ─────────────────────────────────────────────────────────
+  function setStatus(msg, type = 'info') {
+    statusBar.textContent = msg;
+    statusBar.className = 'status-bar ' + type;
+  }
+
+  // ── Clear map restaurant layers ───────────────────────────────────────────
+  function clearRestaurantLayers() {
+    restaurantMarkers.forEach(m => map.removeLayer(m));
+    restaurantMarkers = [];
+    if (radiusCircle) { map.removeLayer(radiusCircle); radiusCircle = null; }
+  }
+
+  // ── Place user marker ─────────────────────────────────────────────────────
+  function placeUserMarker(lat, lng) {
+    if (userMarker) map.removeLayer(userMarker);
+    userMarker = L.marker([lat, lng], {
+      icon: L.divIcon({ className: 'user-marker', html: '📍', iconSize: [28, 28], iconAnchor: [14, 28] })
+    }).addTo(map).bindPopup('您的位置').openPopup();
+    map.setView([lat, lng], 15);
+  }
+
+  // ── Draw radius circle ────────────────────────────────────────────────────
+  function drawRadius(lat, lng, radiusMeters) {
+    if (radiusCircle) map.removeLayer(radiusCircle);
+    radiusCircle = L.circle([lat, lng], {
+      radius: radiusMeters,
+      color: '#3b82f6',
+      fillColor: '#93c5fd',
+      fillOpacity: 0.12,
+      weight: 2
+    }).addTo(map);
+  }
+
+  // ── Escape HTML ───────────────────────────────────────────────────────────
+  function esc(str) {
+    if (!str) return '';
+    return String(str)
+      .replace(/&/g, '&amp;')
+      .replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;')
+      .replace(/"/g, '&quot;')
+      .replace(/'/g, '&#39;');
+  }
+
+  // ── Render results ────────────────────────────────────────────────────────
+  function renderRestaurants(restaurants, lat, lng) {
+    restaurantList.innerHTML = '';
+    resultCount.textContent = `（${restaurants.length} 間）`;
+
+    if (restaurants.length === 0) {
+      restaurantList.innerHTML = '<p class="no-results">此範圍內找不到符合條件的餐廳。</p>';
+      resultsSection.style.display = '';
+      return;
+    }
+
+    const radius = parseInt(radiusSelect.value, 10);
+
+    restaurants.forEach((r, idx) => {
+      // ── Card ──
+      const card = document.createElement('article');
+      card.className = 'rst-card';
+
+      const scoreClass = r.score >= 4.0 ? 'score-gold' : r.score >= 3.5 ? 'score-green' : 'score-default';
+      const scoreText  = r.score != null ? r.score.toFixed(2) : '—';
+      const imgHtml    = r.image
+        ? `<img class="rst-thumb" src="${esc(r.image)}" alt="${esc(r.name)}" loading="lazy" onerror="this.style.display='none'" />`
+        : `<div class="rst-thumb rst-thumb-placeholder">🍽️</div>`;
+
+      card.innerHTML = `
+        <div class="rst-card-inner">
+          ${imgHtml}
+          <div class="rst-info">
+            <a class="rst-name" href="${esc(r.url)}" target="_blank" rel="noopener">${esc(r.name)}</a>
+            <div class="rst-meta">
+              <span class="score-badge ${scoreClass}">★ ${scoreText}</span>
+              ${r.genre  ? `<span class="tag">${esc(r.genre)}</span>` : ''}
+              ${r.budget ? `<span class="tag">💴 ${esc(r.budget)}</span>` : ''}
+            </div>
+            ${r.address ? `<p class="rst-address">📌 ${esc(r.address)}</p>` : ''}
+          </div>
+        </div>`;
+
+      const capturedIdx = idx;
+      card.addEventListener('click', () => {
+        const m = restaurantMarkers[capturedIdx];
+        if (m) { map.setView(m.getLatLng(), 17); m.openPopup(); }
+        card.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+      });
+
+      restaurantList.appendChild(card);
+
+      // ── Map marker ──
+      // Tabelog HTML does not expose per-restaurant lat/lng, so we spread
+      // markers in a ring around the search centre as visual indicators.
+      const angle  = (idx / Math.max(restaurants.length, 1)) * 2 * Math.PI;
+      const spread = Math.min(radius * 0.00001, 0.002);
+      const mLat   = lat + Math.cos(angle) * spread * (0.3 + 0.7 * ((idx % 5) / 5));
+      const mLng   = lng + Math.sin(angle) * spread * (0.3 + 0.7 * ((idx % 5) / 5));
+
+      const m = L.marker([mLat, mLng], {
+        icon: L.divIcon({
+          className: 'rst-marker',
+          html: `<span>${idx + 1}</span>`,
+          iconSize: [28, 28],
+          iconAnchor: [14, 14]
+        })
+      }).addTo(map);
+
+      m.bindPopup(`
+        <div class="popup-content">
+          <a href="${esc(r.url)}" target="_blank" rel="noopener"><b>${esc(r.name)}</b></a><br/>
+          <strong>★ ${scoreText}</strong>
+          ${r.genre   ? `<br/>${esc(r.genre)}` : ''}
+          ${r.address ? `<br/><small>${esc(r.address)}</small>` : ''}
+        </div>`);
+
+      restaurantMarkers.push(m);
+    });
+
+    resultsSection.style.display = '';
+  }
+
+  // ── Main search ───────────────────────────────────────────────────────────
+  async function doSearch(lat, lng) {
+    const radius   = parseInt(radiusSelect.value, 10);
+    const minScore = parseFloat(minScoreInput.value);
+
+    setStatus('🔍 搜尋中，請稍候…', 'info');
+    searchBtn.disabled = true;
+    clearRestaurantLayers();
+    placeUserMarker(lat, lng);
+    drawRadius(lat, lng, radius);
+
+    try {
+      const res = await fetch(
+        `/api/restaurants?lat=${lat}&lng=${lng}&radius=${radius}&min_score=${minScore}`
+      );
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({}));
+        throw new Error(err.error || `HTTP ${res.status}`);
+      }
+      const data = await res.json();
+      renderRestaurants(data.restaurants, lat, lng);
+      setStatus(
+        data.count > 0
+          ? `✅ 找到 ${data.count} 間評分 ≥ ${minScore} 的餐廳`
+          : `⚠️ 範圍內找不到評分 ≥ ${minScore} 的餐廳`,
+        data.count > 0 ? 'success' : 'warn'
+      );
+    } catch (e) {
+      setStatus(`❌ 搜尋失敗：${e.message}`, 'error');
+    } finally {
+      searchBtn.disabled = false;
+    }
+  }
+
+  // ── Search button ─────────────────────────────────────────────────────────
+  searchBtn.addEventListener('click', () => {
+    const source = document.querySelector('input[name="loc-source"]:checked').value;
+
+    if (source === 'manual') {
+      const lat = parseFloat(inputLat.value);
+      const lng = parseFloat(inputLng.value);
+      if (isNaN(lat) || isNaN(lng)) {
+        setStatus('❌ 請輸入有效的緯度和經度', 'error');
+        return;
+      }
+      doSearch(lat, lng);
+    } else {
+      if (!navigator.geolocation) {
+        setStatus('❌ 瀏覽器不支援定位，請改用手動輸入', 'error');
+        return;
+      }
+      setStatus('📡 正在取得您的位置…', 'info');
+      navigator.geolocation.getCurrentPosition(
+        pos => doSearch(pos.coords.latitude, pos.coords.longitude),
+        err => setStatus(`❌ 無法取得位置（${err.message}），請改用手動輸入`, 'error'),
+        { enableHighAccuracy: true, timeout: 10000 }
+      );
+    }
+  });
+
+  // ── Click map to set manual location ─────────────────────────────────────
+  map.on('click', e => {
+    document.querySelector('input[name="loc-source"][value="manual"]').checked = true;
+    manualCoords.style.display = '';
+    inputLat.value = e.latlng.lat.toFixed(6);
+    inputLng.value = e.latlng.lng.toFixed(6);
+    setStatus(`📍 已選取位置：${e.latlng.lat.toFixed(5)}, ${e.latlng.lng.toFixed(5)}`, 'info');
+  });
+})();
